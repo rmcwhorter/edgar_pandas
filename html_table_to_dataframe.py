@@ -1,3 +1,4 @@
+print("SOF")
 import pandas as pd
 import numpy as np
 from bs4 import BeautifulSoup
@@ -6,39 +7,45 @@ import re
 
 pd.set_option('display.max_columns', 9)
 
-html_table = '''
-<table>
-  <thead>
-    <tr><th>Col1</th><th>Col2</th>
-  </thead>
-  <tbody>
-    <tr><td>1a</td><td>2a</td></tr>
-  </tbody>
-  <tbody>
-    <tr><td>1b</td><td>2b</td></tr>
-  </tbody>
-</table>'''
-
-html_table = cs.cashflows_tsla
-
-# fix HTML
-soup = BeautifulSoup(html_table, "html.parser")
-for body in soup("tbody"):
-    body.unwrap()
-
-df = pd.read_html(str(soup), flavor="bs4")
-
-#This drops any columns in the dataframe that contain only one unique value
-#This helps standardize dataframes
-for a in df[0]:
-    if(len(df[0][a].unique()) == 1):
-        #drop the column
-        df[0] = df[0].drop(columns=[a])
+def cashflow_html_to_pandas(html_table):
+    # fix HTML
+    soup = BeautifulSoup(html_table, "html.parser")
+    for body in soup("tbody"):
+        body.unwrap()
     
-#We also want to drop all rows that contain only one unique value
-for index, row in df[0].iterrows():
-    if(len(row.unique()) == 1):
-        df[0].drop(index, inplace=True)    
+    df = pd.read_html(str(soup), flavor="bs4")[0]
+
+    #This drops any columns in the dataframe that contain only one unique value
+    #This helps standardize dataframes   
+    #We also want to drop all rows that contain only one unique value
+    df_empty_cleaner(df)
+    
+    #So the first two rows seem always to contain dating information
+    #So lets take these and store them somewhere else, then drop them from the table
+    dating_information = df.loc[df.index.values[0:2],:]
+    print(dating_information)
+    df.drop(df.index.values[0:2], inplace=True)
+    
+    #Remove all instances of '$' from dataframe
+    df.replace(to_replace="$", value=np.nan, inplace=True)
+    df.replace(to_replace="—", value=0, inplace=True)
+    df.replace(to_replace=",", value="", inplace=True)
+    df.replace(to_replace="(", value="-", inplace=True)
+    
+    df_empty_cleaner(df)
+    
+    return df
+
+def df_empty_cleaner(df):
+    for a in df:
+        if(len(df[a].unique()) == 1):
+            #drop the column
+            df.drop(columns=[a], inplace=True)
+    
+    for index, row in df.iterrows():
+        if(len(row.unique()) == 1):
+            df.drop(index, inplace=True)
+    return df
     
         
 '''
@@ -82,7 +89,16 @@ for a in range(len(df[0].index.values)):
 
 df[0] = df[0].drop(columns=[1,2,4,5,6,8])
 '''
+tsla_in = cs.cashflows_tsla
+tsla_out = "cashflows_tsla_raw.xlsx"
 
-df[0].to_excel("cashflows_tsla_raw.xlsx")
-print(df[0].columns.values)
-print(df[0])
+aapl_in = cs.cashflows_aapl
+aapl_out = "cashflows_aapl_raw.xlsx"
+
+tsla = cashflow_html_to_pandas(tsla_in)
+aapl = cashflow_html_to_pandas(aapl_in)
+
+tsla.to_excel(tsla_out)
+aapl.to_excel(aapl_out)
+
+print("EOF")
